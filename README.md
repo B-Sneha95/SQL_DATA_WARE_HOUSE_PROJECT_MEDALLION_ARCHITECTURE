@@ -22,19 +22,26 @@ Validation (key integrity and domain constraints)
 Derived Columns and Data Enrichment
 Output is cleaned and standardized data ready for integration.
 
-🔸 Gold Layer – Business
-Contains business-ready data models using a Star Schema.
+🔸 Gold Layer (Business-Ready Data – “Analytics”)
+This layer is where the business logic is implemented and the Star Schema is created.Transforms cleaned data into business-ready models.
+The purpose is to deliver a single source of truth for analytics, BI, and reporting.
 Combines cleaned datasets to create fact and dimension tables:
 gold.fact_sales
 gold.dim_customers
 gold.dim_products
 
-Implements business logic such as:
-Sales_Amount = Quantity * Price
-Enables BI tools like Power BI / Tableau for visualization.
+Data transformations in this layer include:
+Aggregations and metrics (e.g., total sales, revenue by product)
+Business calculations such as Sales_Amount = Quantity * Price
+Dimensional modeling using Fact and Dimension tables
+Designed for optimal performance in Power BI, Tableau, or ad-hoc SQL analysis.
+
+Star Schema Structure:
+gold.fact_sales → Contains transaction-level metrics
+gold.dim_customers → Customer demographics
+gold.dim_products → Product hierarchy and details
 
 📊 Data Model (Star Schema)
-
 Fact Table:
 gold.fact_sales → Stores metrics such as quantity, price, sales amount, and foreign keys linking to dimensions.
 
@@ -45,6 +52,21 @@ gold.dim_products → Product details (category, maintenance status, cost, etc.)
 Relationships:
 fact_sales.customer_key → dim_customers.customer_key
 fact_sales.product_key → dim_products.product_key
+
+🔹 Data Quality Checks Implemented
+Null and Blank Check-	Removed or imputed missing values
+Duplicate Check-	Ensured unique transaction and product IDs
+Format Standardization-	Unified date and currency formats
+Referential Integrity-	Validated foreign key relationships
+Consistency Validation-	Checked that sales amounts align with quantity × price
+
+🔹 Key SQL Operations Used
+Stored Procedures for ETL logic within SQL Server
+Joins and Unions for dataset merging
+CTEs (Common Table Expressions) for stepwise transformation
+Aggregate Functions (SUM, COUNT, AVG) for business metrics
+Constraints & Keys to maintain referential integrity
+Views for exposing final business-ready datasets
 
 🧰 Tools & Technologies
 SQL Server Management Studio (SSMS)
@@ -57,6 +79,10 @@ ETL Concepts – Bronze/Silver/Gold Data Flow
 ✅ Performed complete data quality checks and standardization.
 ✅ Built a robust star schema for sales analytics.
 ✅ Prepared data for Power BI and machine learning integrations.
+
+🔹 Project Impact
+This project demonstrates how powerful SQL alone can be for building complete ETL pipelines. By working through every layer of data transformation manually, it highlights real-world data engineering skills:
+From raw ingestion to refined insights — every layer adds business value and trust in data.
 
 📸 Visual References
 Medallion Architecture (Bronze → Silver → Gold)
