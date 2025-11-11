@@ -17,10 +17,15 @@ These contain transactional, customer, and product-level details used across the
 
 ## 📊 Project Workflow Summary
 Here’s a step-by-step breakdown of how data flows through each layer of the SQL Data Warehouse Medallion Architecture:
+
 Step 1: Import raw data into Bronze tables — ingest unprocessed ERP & CRM data for traceability and auditing.
+
 Step 2: Clean and validate data in Silver tables — remove duplicates, handle nulls, and ensure schema consistency.
+
 Step 3: Transform cleaned data into analytical Gold models — apply business logic, aggregations, and build star schema structures.
+
 Step 4: Verify data quality and enforce referential integrity — validate keys and relationships between fact and dimension tables.
+
 Step 5: Prepare final datasets for Business Intelligence dashboards — optimized for Power BI and advanced analytics use cases.
 
 ---
