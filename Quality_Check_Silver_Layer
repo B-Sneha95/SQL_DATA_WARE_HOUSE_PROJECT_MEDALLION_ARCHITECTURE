@@ -1,0 +1,548 @@
+--Data Cleaning
+
+--we need to do quality check i.e,inconsistencies and null values in the data and have to clean the data before
+--loading in to silver layer.so here we are taking the bronze layer tables to clean /transform them.
+--Quality checks:
+--1.Primary key-not null and unique
+--2.checking for extra spaces,nulls,needs splitting or removing redundant calues in the rest of the columns
+
+
+-- crm_cust_info cleaning
+
+select * from bronze.crm_cust_info;
+
+--Here in crm_cust_info cst_id is the primary key so we need to make it unique with out duplicates.
+--The query is as follows:
+
+select cst_id,count(*) as count_ from silver.crm_cust_info
+group by cst_id
+having count(*)>1 or cst_id is null;
+
+--here is the query which removes nulls and duplicates
+select 
+cst_id,
+cst_key,
+trim(cst_firstname) as cst_firstname,
+trim(cst_lastname)as cst_lastname,
+case
+	when upper(trim(cst_marital_status))='S' then 'Single'
+	when upper(trim(cst_marital_status))='M' then 'Married'
+else	
+	'N/A'
+	end as cst_marital_status,
+case 
+	when upper(trim(cst_gndr))='F' then 'Female'
+	when upper(trim(cst_gndr))='M' then 'Male'
+else
+	'N/A'
+	end as cst_gndr,
+cst_create_date
+from(
+select *,
+row_number () over (partition by cst_id order by cst_create_date desc) as ranking_by_row_number
+from bronze.crm_cust_info) as T
+where ranking_by_row_number=1 and cst_id is not null;
+
+
+
+
+
+-- column 3,4 cst_firstname,cst_lastname
+--check for names with unwanted spaces
+
+select cst_firstname from silver.crm_cust_info
+where cst_firstname! = trim(cst_firstname);
+
+select cst_lastname from silver.crm_cust_info
+where cst_lastname!=trim(cst_lastname);
+
+-- check for the distinct values in gender column
+select distinct(cst_gndr) from silver.crm_cust_info;
+
+-- check for the distinct values in marital status column
+select distinct(cst_marital_status) from silver.crm_cust_info;
+
+--check for the distinct values in create_date column
+--Note: if we have null values in the date column then it will show them in the starting only .No need to scroll
+--down and check for the nulls in the entire column
+
+select distinct(cst_create_date) from silver.crm_cust_info;
+
+
+--After cleaning the bronze.crm_cust_info we need to insert this cleanined data in to silver.crm_cust_info
+
+select * from silver.crm_cust_info;
+
+insert into silver.crm_cust_info(
+cst_id,
+cst_key,
+cst_firstname,
+cst_lastname,
+cst_marital_status,
+cst_gndr,
+cst_create_date)
+select 
+cst_id,
+cst_key,
+trim(cst_firstname) as cst_firstname,
+trim(cst_lastname)as cst_lastname,
+case
+	when upper(trim(cst_marital_status))='S' then 'Single'
+	when upper(trim(cst_marital_status))='M' then 'Married'
+else	
+	'N/A'
+	end as cst_marital_status,
+case 
+	when upper(trim(cst_gndr))='F' then 'Female'
+	when upper(trim(cst_gndr))='M' then 'Male'
+else
+	'N/A'
+	end as cst_gndr,
+cst_create_date
+from(
+select *,
+row_number () over (partition by cst_id order by cst_create_date desc) as ranking_by_row_number
+from bronze.crm_cust_info) as T
+where ranking_by_row_number=1 and cst_id is not null;
+
+select * from silver.crm_cust_info;
+
+
+
+
+
+
+
+
+
+
+--Table 2
+--crm_prd_info cleaning
+
+select * from bronze.crm_prd_info;
+
+--prd_id is the primary key-we need to check for nulls and redundant values
+
+select prd_id,count(*)as count_ from bronze.crm_prd_info
+group by prd_id
+having count(*)>1;
+
+-- the product_id in the crm_prd_info and the id in the erp_px_cat_g1V2 must be same because they are common 
+--in both the tables and are connected .so lets check whether they are same or not.
+
+ select prd_key from bronze.crm_prd_info;
+
+ select id from bronze.erp_px_cat_g1V2;
+ select sls_prd_key from bronze.crm_sales_details;
+
+--if we execute these above queries we will get the info that we neet to split the column prd_key from
+--crm_prd_info.After splitting it in to two parts eg:(CL-SO-SO-B909-L) in to firstpart==>(CL-SO) connected to 
+--erp_px_cat_g1V2 & secondpart==>(SO-B909-L) is connected to crm_sales_details.please look in to architecture
+--to get clear idea about this.
+
+
+select * from bronze.crm_prd_info;
+
+--Lets split and clean the columns:
+select
+prd_id,
+replace(substring(Prd_key,1,5),'-','_') as cat_id,
+substring(prd_key,7,len(prd_key)) as prd_key,
+isnull(prd_cost,0) as prd_cost,
+case
+	when upper(trim(prd_line))='R' then 'Road'
+	when upper(trim(prd_line))='M' then 'Mountain'
+	when upper(trim(prd_line))='S' then 'Other Sales'
+	when upper(trim(prd_line))='T' then 'Touring'
+else 'N/A' end as prd_line,
+cast(prd_start_dt as date) as prd_start_dt,
+cast(lead(prd_start_dt)over(partition by prd_key order by prd_start_dt)-1 as date) as prd_end_dt
+
+
+from bronze.crm_prd_info;
+
+
+
+
+--2.
+select * from bronze.crm_sales_details;
+--1.
+select id from bronze.erp_px_cat_g1v2;
+
+--for 1 along with crm_prd_info,if we execute above two queries we get the output with a small correction that is we have - in prd_key 
+-- but we have _ in id .So we need to replace it with _
+
+--for 2 along with crm_prd_info, if we execute above queries we have to split the prd_key in crm_prd_info from the 
+-- 7th character to till the end of the key.so that we can connect with crm_sales_details.
+
+--Note:
+--so we have connected cat_id(crm_prd_info) with id(erp_px_cat_gv12)
+--and prd_key(crm_prd_info) with sls_prd_key(crm_sales_details)
+
+
+--column 3 prd_nm validation
+select prd_nm from bronze.crm_prd_info
+where prd_nm !=trim(prd_nm);
+
+--column 4 prd_cost validation
+select prd_cost from bronze.crm_prd_info
+where prd_cost<=0 or prd_cost is null ;
+
+
+--column 5 prd_line validation
+select distinct(prd_line) from bronze.crm_prd_info;
+
+-- column 6,7 dates validation
+select * from bronze.crm_prd_info where prd_start_dt > prd_end_dt ;
+--or
+select * from bronze.crm_prd_info where prd_end_dt < prd_start_dt;
+
+
+--we have create a new silver product table with new features unlike in the bronze..we have added extra columns
+--so we need to drop the silver prd table and again create it
+select * from silver.crm_prd_info;
+
+
+drop table silver.crm_prd_info;
+
+-- create a new table for silver.crm_prd_info
+
+
+CREATE TABLE silver.crm_prd_info (
+    prd_id          INT,
+    cat_id          NVARCHAR(50),
+    prd_key         NVARCHAR(50),
+    prd_nm          NVARCHAR(50),
+    prd_cost        INT,
+    prd_line        NVARCHAR(50),
+    prd_start_dt    DATE,
+    prd_end_dt      DATE,
+    dwh_create_date DATETIME2 DEFAULT GETDATE()
+);
+
+--inserting the cleaned data in to newly created silver.crm_prd_info
+
+insert into silver.crm_prd_info (
+prd_id,
+cat_id,
+prd_key,
+prd_nm,
+prd_cost,
+prd_line,
+prd_start_dt,
+prd_end_dt
+)
+select
+prd_id,
+replace(substring(Prd_key,1,5),'-','_') as cat_id,
+substring(prd_key,7,len(prd_key)) as prd_key,
+prd_nm,
+isnull(prd_cost,0) as prd_cost,
+case
+	when upper(trim(prd_line))='R' then 'Road'
+	when upper(trim(prd_line))='M' then 'Mountain'
+	when upper(trim(prd_line))='S' then 'Other Sales'
+	when upper(trim(prd_line))='T' then 'Touring'
+else 'N/A' end as prd_line,
+cast(prd_start_dt as date) as prd_start_dt,
+cast(lead(prd_start_dt)over(partition by prd_key order by prd_start_dt)-1 as date) as prd_end_dt
+from bronze.crm_prd_info;
+
+select * from silver.crm_prd_info;
+
+
+
+
+
+
+
+
+
+
+
+--Table 3
+
+--Bronze.crm_sales_details
+--cleaning and quality checks ,validation
+
+select * from bronze.crm_sales_details;
+select * from silver.crm_cust_info;
+-- these 2 tables must have a relationship with the primary key cust_id
+
+--1.validate the date columns whether there a 8 numbers in it i.e, yyyymmdd
+select sls_order_dt from bronze.crm_sales_details
+where sls_order_dt <=0 or len(sls_order_dt)!=8;
+
+--2.validate sales ,Quantity and price
+select  sls_sales,sls_quantity,sls_price from bronze.crm_sales_details;
+
+--validate sales column,sales=quantity* price.lets check whether there are any values where sales!=Q*P
+select * from bronze.crm_sales_details
+where sls_sales!=sls_Quantity * sls_price or  sls_sales is null;
+
+-- validate sls_quantity
+select * from bronze.crm_sales_details
+where sls_Quantity=sls_sales/sls_price or sls_quantity<=0 or  sls_quantity is null;
+
+-- validate sls_price
+select * from bronze.crm_sales_details
+where sls_price!= sls_sales/sls_Quantity  or sls_price <=0 or  sls_price is null;
+
+
+
+
+
+select * from bronze.crm_sales_details;
+
+
+select
+sls_ord_num,
+sls_prd_key,
+sls_cust_id,
+case 
+when sls_order_dt=0 or len(sls_order_dt)!=8 then NULL
+else cast(cast(sls_order_dt as varchar)as date) 
+end as sls_order_dt ,
+case 
+when sls_ship_dt=0 or len(sls_ship_dt)!=8 then NULL
+else cast(cast(sls_ship_dt as varchar)as date) 
+end as sls_ship_dt ,
+case 
+when sls_due_dt=0 or len(sls_due_dt)!=8 then NULL
+else cast(cast(sls_due_dt as varchar)as date) 
+end as sls_due_dt,
+case
+when sls_sales is null or sls_sales <=0 or sls_sales!=sls_quantity* abs(sls_price)
+then sls_Quantity * ABS(sls_price) else sls_sales
+end as sls_sales,
+case 
+when sls_price is null or sls_price <=0 or sls_price!=sls_sales/sls_quantity
+then sls_sales/nullif(sls_quantity,1)else sls_price 
+end as sls_price,
+sls_quantity
+
+from bronze.crm_sales_details;
+
+
+
+//*case
+when sls_quantity is null or sls_quantity< 0 or sls_quantity!=sls_price/sls_sales
+then sls_price/sls_sales else sls_quantity
+end as sls_quantity*//
+
+drop table silver.crm_sales_details;
+
+
+
+--final cleaned data for silver.crm_sales_details
+--Inserting the cleaned data in to silver layer
+CREATE TABLE silver.crm_sales_details (
+    sls_ord_num     NVARCHAR(50),
+    sls_prd_key     NVARCHAR(50),
+    sls_cust_id     INT,
+    sls_order_dt    DATE,
+    sls_ship_dt     DATE,
+    sls_due_dt      DATE,
+    sls_sales       INT,
+    sls_quantity    INT,
+    sls_price       INT,
+    dwh_create_date DATETIME2 DEFAULT GETDATE()
+);
+
+INSERT INTO silver.crm_sales_details (
+			sls_ord_num,
+			sls_prd_key,
+			sls_cust_id,
+			sls_order_dt,
+			sls_ship_dt,
+			sls_due_dt,
+			sls_sales,
+			sls_quantity,
+			sls_price
+		)
+select 
+sls_ord_num,
+sls_prd_key,
+sls_cust_id,
+case 
+ when sls_order_dt = 0 or len(sls_order_dt) != 8 then NULL
+ else cast(CAST(SLS_order_dt as varchar) as date) 
+ end as sls_order_dt,
+case 
+ when sls_ship_dt = 0 or len(sls_ship_dt) != 8 then NULL
+ else cast(CAST(sls_ship_dt as varchar) as date) 
+ end as sls_ship_dt,
+case
+ when sls_due_dt = 0 or len(sls_due_dt) != 8 then NULL
+ else cast(CAST(sls_due_dt as varchar) as date) 
+ end as sls_due_dt,
+ CASE
+  WHEN SLS_SALES IS NULL OR SLS_SALES <= 0 or SLS_SALES != sls_quantity * ABS(sls_price)
+  then sls_quantity * ABS(sls_price)
+  else SLS_SALES
+  end as sls_sales,
+ CASE
+  WHEN SLS_price IS NULL OR SLS_price <= 0 
+  then sls_sales / NULLIF(sls_quantity,1)
+  else SLS_price
+  end as SLS_price,
+  sls_quantity
+from bronze.crm_sales_details;
+
+select * from silver.crm_sales_details;
+
+
+
+--lets crosscheck and do some validation for silver.crm_sales_details
+select * from silver.crm_sales_details
+where sls_sales!=sls_quantity * sls_price or sls_sales is null;
+
+
+
+
+
+
+
+
+
+
+
+
+
+--Table 4 bronze.erp_cust_az12
+--lets start with ERP tables 
+
+select * from bronze.erp_cust_az12;
+select * from bronze.crm_cust_info;
+
+-- the above two tables are connected with cid and cst_id.check whether both are same or not
+
+
+
+--check for nulls,empty data,redundamcies and inconsistencies 
+--colum 1
+select cid,count(*) as count_ from bronze.erp_cust_az12
+group by cid having count(*)>1;
+
+--column 2
+select distinct(gen) as gen_distinct from bronze.erp_cust_az12;
+
+--column3
+select distinct(bdate)
+from  bronze.erp_cust_az12
+where bdate >=getdate() or bdate <'1925-10-26';
+
+
+select
+case when cid like 'NAS%' then substring(cid,4,len(cid)) 
+else cid end as cid,
+case when bdate>getdate() then NULL
+else bdate end as bdate,
+case	
+	when upper(trim(gen))='M' or gen='Male' then 'Male'
+	when upper(trim(gen))='F' or gen='Female' then 'Female'
+	else 'N/A'
+	end as gen
+from bronze.erp_cust_az12;
+
+
+
+
+
+--inserting the cleaned date in to erp_cust_az1;
+
+insert into silver.erp_cust_az12(
+cid,bdate,gen)
+select
+case when cid like 'NAS%' then substring(cid,4,len(cid)) 
+else cid end as cid,
+case when bdate>getdate() then NULL
+else bdate end as bdate,
+case	
+	when upper(trim(gen))='M' or gen='Male' then 'Male'
+	when upper(trim(gen))='F' or gen='Female' then 'Female'
+	else 'N/A'
+	end as gen
+from bronze.erp_cust_az12;
+
+select * from silver.erp_cust_az12;
+
+
+
+
+
+--table 5 
+--bronze.erp_loc_a101
+
+select * from bronze.erp_loc_a101;
+select * from silver.crm_cust_info;
+
+-- these two tables are connect with cid and cst_key.lets check whether both are same by executing above
+--select  querues at a time to compare
+
+-- vlidate cntry column
+select distinct(cntry) from bronze.erp_loc_a101;
+
+--clean the table and validate if any inconsistencies ,null are there
+
+Select 
+replace (cid,'-','') as cid,
+case	
+	when trim(cntry) ='DE' then 'Germany'
+	when trim(cntry) in ('US','USA') then 'United States'
+	when trim(cntry) =''or cntry is null then 'N/A'
+else cntry end as cntry
+
+from bronze.erp_loc_a101;
+
+
+--inserting the cleanied data in to silver.erp_loc_a101
+insert into silver.erp_loc_a101(
+cid,cntry)
+Select 
+replace (cid,'-','') as cid,
+case	
+	when trim(cntry) ='DE' then 'Germany'
+	when trim(cntry) in ('US','USA') then 'United States'
+	when trim(cntry) =''or cntry is null then 'N/A'
+else cntry end as cntry
+
+from bronze.erp_loc_a101;
+
+
+
+
+
+
+
+
+--table 6 
+--bronze.erp_px_cat_g1v2
+
+select * from bronze.erp_px_cat_g1v2;
+
+--lets validate bronze.erp_px_cat_g1v2
+select * from bronze.erp_px_cat_g1v2
+where cat!=trim(cat) or subcat!=trim(subcat) or maintenance!=trim(maintenance);
+
+--lets validate maintenance column
+select distinct(maintenance) from bronze.erp_px_cat_g1v2;
+
+-- there is no need to do data cleaning as everything is perfect
+--Now insert the data in to silver.erp_px_cat_g1v2;
+insert into silver.erp_px_cat_g1v2(
+id,
+cat,
+subcat,
+maintenance)
+select 
+id,
+cat,
+subcat,
+maintenance
+from bronze.erp_px_cat_g1v2;
+
+select * from silver.erp_px_cat_g1v2;
+
+
+
