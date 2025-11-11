@@ -15,6 +15,13 @@ To extract raw **Sales Data** from multiple source systems (CRM, ERP), perform *
 👉 Download and use the provided datasets to replicate the workflow.  
 These contain transactional, customer, and product-level details used across the Medallion layers.
 
+📊 Project Workflow Summary
+
+Step 1: Import raw data into bronze tables.
+Step 2: Clean and validate data into silver tables.
+Step 3: Transform cleaned data into analytical models (gold).
+Step 4: Verify data quality and referential integrity.
+Step 5: Prepare final datasets for BI dashboards.
 ---
 
 ## 🧱 Architecture Overview
